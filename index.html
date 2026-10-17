@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radio w TV</title>
+<style>
+  :root { --bg:#000; --panel:#0e141e; --line:#24324a; --ink:#e8eef7; --dim:#8a98ad; --acc:#57b6ff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4vh; padding:16px; }
+  h1 { margin:0; font-size:clamp(1.6rem,4vw,3rem); letter-spacing:.04em; }
+  #now { font-size:clamp(1.2rem,3vw,2.2rem); color:var(--acc); min-height:1.3em; text-align:center; }
+  #status { font-size:clamp(.9rem,1.8vw,1.3rem); color:var(--dim); text-align:center; min-height:1.3em; }
+  #status.ok { color:var(--ok); } #status.warn { color:var(--warn); } #status.bad { color:var(--bad); }
+  .grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2vw; width:min(1100px, 100%); }
+  button { font:inherit; font-size:clamp(1rem,2vw,1.5rem); font-weight:600; color:var(--ink); background:var(--panel);
+    border:2px solid var(--line); border-radius:16px; padding:1.1em .6em; cursor:pointer; }
+  button small { display:block; font-size:.65em; font-weight:400; color:var(--dim); margin-top:.3em; }
+  button:focus, button:hover { border-color:var(--acc); outline:none; }
+  button.on { background:var(--acc); color:#04121f; border-color:var(--acc); }
+  button.on small { color:#04121f; }
+  #stop { background:transparent; padding:.6em 2em; }
+  @media (max-width:600px) { .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<h1>📻 Radio w TV</h1>
+<div id="now">Wybierz stację</div>
+<div id="status"></div>
+<div class="grid" id="grid"></div>
+<button id="stop">■ Stop</button>
+<audio id="player" preload="none"></audio>
+<script>
+  const STATIONS = [
+    { name:"Swiss Jazz",       gen:"jazz",                url:"https://stream.srg-ssr.ch/srgssr/rsj/mp3/128" },
+    { name:"FIP Jazz",         gen:"jazz",                url:"https://icecast.radiofrance.fr/fipjazz-midfi.mp3" },
+    { name:"Sonic Universe",   gen:"nowoczesny jazz",     url:"https://ice6.somafm.com/sonicuniverse-128-mp3" },
+    { name:"Jazz Underground", gen:"klasyczny jazz",      url:"https://icecast.walmradio.com:8443/jazz" },
+    { name:"FIP Groove",       gen:"jazz-funk, soul",     url:"https://icecast.radiofrance.fr/fipgroove-midfi.mp3" },
+    { name:"Bossa Beyond",     gen:"bossa nova",          url:"https://ice2.somafm.com/bossa-128-mp3" }
+  ];
+  const player = document.getElementById("player"), grid = document.getElementById("grid"),
+        nowEl = document.getElementById("now"), st = document.getElementById("status");
+  let current = -1, playing = false, cuts = 0, since = 0, retryT = null;
+  const btns = STATIONS.map((s, i) => {
+    const b = document.createElement("button");
+    b.innerHTML = s.name + "<small>" + s.gen + "</small>";
+    b.addEventListener("click", () => play(i));
+    grid.appendChild(b); return b;
+  });
+
+  function status(text, cls){ st.textContent = text; st.className = cls || ""; }
+  function info(){
+    if (!playing) return;
+    const min = Math.floor((Date.now() - since) / 60000);
+    status("▶ gra · " + min + " min · zacięć: " + cuts, cuts ? "warn" : "ok");
+  }
+  function play(i){
+    current = i; playing = true; cuts = 0; since = Date.now();
+    btns.forEach((b, k) => b.classList.toggle("on", k === i));
+    nowEl.textContent = STATIONS[i].name;
+    status("łączenie…");
+    clearTimeout(retryT); retryT = null;
+    player.src = STATIONS[i].url;
+    player.play().catch(() => status("naciśnij jeszcze raz stację", "bad"));
+  }
+  function stop(){
+    playing = false; clearTimeout(retryT); retryT = null;
+    player.pause(); player.removeAttribute("src"); player.load();
+    btns.forEach(b => b.classList.remove("on"));
+    nowEl.textContent = "Wybierz stację"; status("");
+  }
+  // zaciecie = odtwarzacz czeka na dane w trakcie grania
+  player.addEventListener("waiting", () => { if (playing && player.currentTime > 1){ cuts++; status("⏸ buforowanie… · zacięć: " + cuts, "warn"); } });
+  player.addEventListener("playing", info);
+  // strumien padl -> polacz od nowa po 3 s
+  function reconnect(){
+    if (!playing || retryT) return;
+    status("utracono połączenie – łączę ponownie…", "bad");
+    retryT = setTimeout(() => {
+      retryT = null; if (!playing) return;
+      const u = STATIONS[current].url;
+      player.src = u + (u.indexOf("?") >= 0 ? "&" : "?") + "r=" + Date.now();
+      player.play().catch(() => {});
+    }, 3000);
+  }
+  player.addEventListener("error", reconnect);
+  player.addEventListener("ended", reconnect);
+  setInterval(() => { if (playing && !player.paused && player.readyState >= 3) info(); }, 30000);
+  document.getElementById("stop").addEventListener("click", stop);
+  btns[0].focus();
+</script>
+</body>
+</html>
