@@ -7,20 +7,22 @@
 <style>
   :root { --bg:#000; --panel:#0e141e; --line:#24324a; --ink:#e8eef7; --dim:#8a98ad; --acc:#57b6ff; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; }
   * { box-sizing:border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:system-ui, -apple-system, "Segoe UI", sans-serif; }
-  body { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4vh; padding:16px; }
-  h1 { margin:0; font-size:clamp(1.6rem,4vw,3rem); letter-spacing:.04em; }
-  #now { font-size:clamp(1.2rem,3vw,2.2rem); color:var(--acc); min-height:1.3em; text-align:center; }
+  html, body { margin:0; min-height:100%; background:var(--bg); color:var(--ink); font-family:system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:1.4vh; padding:2vh 16px; overflow-y:auto; }
+  h1 { margin:0; font-size:clamp(1.3rem,min(4vw,6vh),3rem); letter-spacing:.04em; }
+  #now { font-size:clamp(1rem,min(3vw,4.5vh),2.2rem); color:var(--acc); min-height:1.3em; text-align:center; }
+  #status:empty { display:none; }
   #status { font-size:clamp(.9rem,1.8vw,1.3rem); color:var(--dim); text-align:center; min-height:1.3em; }
   #status.ok { color:var(--ok); } #status.warn { color:var(--warn); } #status.bad { color:var(--bad); }
-  .grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:2vw; width:min(1100px, 100%); }
-  button { font:inherit; font-size:clamp(1rem,2vw,1.5rem); font-weight:600; color:var(--ink); background:var(--panel);
-    border:2px solid var(--line); border-radius:16px; padding:1.1em .6em; cursor:pointer; }
+  .grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:1.8vh 1.5vw; width:min(1100px, 100%); }
+  button { font:inherit; font-size:clamp(.85rem,min(2vw,3.2vh),1.5rem); font-weight:600; color:var(--ink); background:var(--panel);
+    border:2px solid var(--line); border-radius:14px; padding:.45em .5em; cursor:pointer; }
   button small { display:block; font-size:.65em; font-weight:400; color:var(--dim); margin-top:.3em; }
   button:focus, button:hover { border-color:var(--acc); outline:none; }
   button.on { background:var(--acc); color:#04121f; border-color:var(--acc); }
   button.on small { color:#04121f; }
-  #stop { background:transparent; padding:.6em 2em; }
+  h2 { margin:.6vh 0 0; font-size:clamp(1rem,2vw,1.5rem); color:var(--dim); font-weight:600; }
+  #stop { background:transparent; padding:.4em 2em; }
   @media (max-width:600px) { .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 </style>
 </head>
@@ -28,8 +30,11 @@
 <h1>📻 Radio w TV</h1>
 <div id="now">Wybierz stację</div>
 <div id="status"></div>
-<div class="grid" id="grid"></div>
 <button id="stop">■ Stop</button>
+<h2>🎷 Jazz</h2>
+<div class="grid" id="grid"></div>
+<h2>🎄 Święta</h2>
+<div class="grid" id="gridXmas"></div>
 <audio id="player" preload="none"></audio>
 <script>
   const STATIONS = [
@@ -38,16 +43,24 @@
     { name:"Sonic Universe",   gen:"nowoczesny jazz",     url:"https://ice6.somafm.com/sonicuniverse-128-mp3" },
     { name:"Jazz Underground", gen:"klasyczny jazz",      url:"https://icecast.walmradio.com:8443/jazz" },
     { name:"FIP Groove",       gen:"jazz-funk, soul",     url:"https://icecast.radiofrance.fr/fipgroove-midfi.mp3" },
-    { name:"Bossa Beyond",     gen:"bossa nova",          url:"https://ice2.somafm.com/bossa-128-mp3" }
+    { name:"Bossa Beyond",     gen:"bossa nova",          url:"https://ice2.somafm.com/bossa-128-mp3" },
+    { name:"80s80s Christmas",  gen:"hity lat 80 · Last Christmas", url:"https://streams.80s80s.de/christmas/mp3-128/streams.80s80s.de/", xmas:1 },
+    { name:"Weihnachts-Hits",   gen:"największe hity świąt",  url:"https://s3-webradio.antenne.de/weihnachts-hits/stream/mp3", xmas:1 },
+    { name:"Radio Santa Claus", gen:"hity i standardy",       url:"https://streaming.radiostreamlive.com/radiosantaclaus_devices", xmas:1 },
+    { name:"Christmas Radio",   gen:"pop i klasyka świąt",    url:"https://0n-christmas.radionetz.de/0n-christmas.mp3", xmas:1 },
+    { name:"Christmas Hits",    gen:"pop świąteczny",         url:"https://christmas-low.rautemusik.fm/", xmas:1 },
+    { name:"Christmas Lounge",  gen:"spokojne",               url:"https://ice2.somafm.com/christmas-128-mp3", xmas:1 },
+    { name:"Jolly Ol' Soul",    gen:"świąteczny soul",        url:"https://ice2.somafm.com/jollysoul-128-mp3", xmas:1 },
+    { name:"WALM Christmas",    gen:"klasyczne kolędy",       url:"https://icecast.walmradio.com:8443/christmas", xmas:1 }
   ];
-  const player = document.getElementById("player"), grid = document.getElementById("grid"),
+  const player = document.getElementById("player"), grid = document.getElementById("grid"), gridXmas = document.getElementById("gridXmas"),
         nowEl = document.getElementById("now"), st = document.getElementById("status");
   let current = -1, playing = false, cuts = 0, since = 0, retryT = null;
   const btns = STATIONS.map((s, i) => {
     const b = document.createElement("button");
     b.innerHTML = s.name + "<small>" + s.gen + "</small>";
     b.addEventListener("click", () => play(i));
-    grid.appendChild(b); return b;
+    (s.xmas ? gridXmas : grid).appendChild(b); return b;
   });
 
   function status(text, cls){ st.textContent = text; st.className = cls || ""; }
